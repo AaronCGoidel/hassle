@@ -167,16 +167,17 @@ prop_singleInstr =
 
 prop_helloWorld :: Bool
 prop_helloWorld =
-    let jmap =
+    let instructions = "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>."
+        jmap =
             buildJumpMap
-                "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>."
+                instructions
                 Data.Map.empty
                 []
                 0
      in bufferEqual
             ( doBfStep
                 ( BfState
-                    "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>."
+                    instructions
                     0
                     [0]
                     0
@@ -193,3 +194,4 @@ main = do
     quickCheck prop_emptyProgram
     quickCheck prop_singleInstr
     quickCheck prop_helloWorld
+    putStr (runbf "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.")
