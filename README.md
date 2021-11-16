@@ -1,5 +1,5 @@
 # Hassle
-A dumb Brainfuck interpreter written in Haskell
+A dumb [Brainfuck](https://esolangs.org/wiki/Brainfuck) interpreter written in Haskell
 
 - 100% function**al**
 - 50% function**ing**
