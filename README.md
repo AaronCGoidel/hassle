@@ -22,8 +22,8 @@ By default, if you compile and run `hassle.hs`, it will run a test suite and the
 - Hello, World!
 - Calculate 10 digits of pi
 
-You can run your own programs by envoking `runbf <bf instructions> <input>`, with whatever bf program and string of input bytes you'd like.
+You can run your own programs by envoking `runbf <bf instructions> <input>` with whatever bf program and string of input bytes you'd like.
 
-
-
-
+# TODO
+- handle errors gracefully (...or at all)
+- improved I/O
