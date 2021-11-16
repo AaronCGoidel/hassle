@@ -29,14 +29,14 @@ setVal pos val lst =
     let (before, after) = Data.List.splitAt pos lst
      in before ++ [val] ++ tail after
 
-data ProgramState = BfState [Char] Int [Int] Int JumpMap [Char]
+data ProgramState = BfState [Char] Int [Int] Int JumpMap [Char] [Char]
     deriving (Eq, Show)
 
 doBfStep :: ProgramState -> ProgramState
 doBfStep
-    (BfState inss pctr cells cptr jmap buffer) =
+    (BfState inss pctr cells cptr jmap ibuffer obuffer) =
         if (length inss) <= pctr
-            then BfState inss pctr cells cptr jmap buffer
+            then BfState inss pctr cells cptr jmap ibuffer obuffer
             else
                 doBfStep
                     ( case inss !! pctr of
@@ -51,7 +51,8 @@ doBfStep
                                 )
                                 (cptr + 1)
                                 jmap
-                                buffer
+                                ibuffer
+                                obuffer
                         '<' ->
                             -- decrement pointer
                             BfState
@@ -63,7 +64,8 @@ doBfStep
                                     else 0
                                 )
                                 jmap
-                                buffer
+                                ibuffer
+                                obuffer
                         '+' ->
                             -- increment value at pointer
                             BfState
@@ -71,7 +73,7 @@ doBfStep
                                 (pctr + 1)
                                 ( setVal
                                     cptr
-                                    ( if (cells !! cptr) < 255
+                                    ( if (cells !! cptr) < 65535
                                         then (cells !! cptr) + 1
                                         else 0
                                     )
@@ -79,7 +81,8 @@ doBfStep
                                 )
                                 cptr
                                 jmap
-                                buffer
+                                ibuffer
+                                obuffer
                         '-' ->
                             -- decrement value at pointer
                             BfState
@@ -89,24 +92,25 @@ doBfStep
                                     cptr
                                     ( if (cells !! cptr) > 0
                                         then (cells !! cptr) - 1
-                                        else 255
+                                        else 65535
                                     )
                                     cells
                                 )
                                 cptr
                                 jmap
-                                buffer
+                                ibuffer
+                                obuffer
                         '[' ->
                             -- jump to matching bracket if value at pointer is 0
                             case ((Data.Map.lookup pctr jmap), (cells !! cptr)) of
-                                (Just jloc, 0) -> BfState inss (jloc + 1) cells cptr jmap buffer
-                                (_, _) -> BfState inss (pctr + 1) cells cptr jmap buffer
+                                (Just jloc, 0) -> BfState inss (jloc + 1) cells cptr jmap ibuffer obuffer
+                                (_, _) -> BfState inss (pctr + 1) cells cptr jmap ibuffer obuffer
                         ']' ->
                             -- jump to matching bracket if value at pointer is non-zero
                             case ((Data.Map.lookup pctr jmap), (cells !! cptr)) of
-                                (_, 0) -> BfState inss (pctr + 1) cells cptr jmap buffer
-                                (Just jloc, _) -> BfState inss (jloc + 1) cells cptr jmap buffer
-                                (_, _) -> BfState inss (pctr + 1) cells cptr jmap buffer -- a correct program should never reach this case
+                                (_, 0) -> BfState inss (pctr + 1) cells cptr jmap ibuffer obuffer
+                                (Just jloc, _) -> BfState inss (jloc + 1) cells cptr jmap ibuffer obuffer
+                                (_, _) -> BfState inss (pctr + 1) cells cptr jmap ibuffer obuffer -- a correct program should never reach this case
                         '.' ->
                             -- add char of value at pointer to output buffer
                             BfState
@@ -115,33 +119,37 @@ doBfStep
                                 cells
                                 cptr
                                 jmap
-                                (buffer ++ [chr (cells !! cptr)])
-                        -- TODO: implement input
-                        _ -> BfState inss (pctr + 1) cells cptr jmap buffer -- if we don't know the instructionm we just skip it
+                                ibuffer
+                                (obuffer ++ [chr (cells !! cptr)])
+                        ',' ->
+                            -- read the next char off the input buffer and store the val at ptr
+                            BfState inss (pctr + 1) (setVal cptr (ord (head ibuffer)) cells) cptr jmap (tail ibuffer) obuffer
+                        _ -> BfState inss (pctr + 1) cells cptr jmap ibuffer obuffer -- if we don't know the instructionm we just skip it
                     )
 
-runbf :: [Char] -> [Char]
-runbf inss =
-    let (BfState _ _ _ _ _ buffer) =
+runbf :: [Char] -> [Char] -> [Char]
+runbf instructions inbuffer =
+    let (BfState _ _ _ _ _ _ obuffer) =
             doBfStep
                 ( BfState
-                    inss
+                    instructions
                     0
                     [0]
                     0
                     ( buildJumpMap
-                        inss
+                        instructions
                         Data.Map.empty
                         []
                         0
                     )
+                    inbuffer
                     ""
                 )
-     in buffer
+     in obuffer
 
 -------- TESTS --------
 bufferEqual :: ProgramState -> [Char] -> Bool
-bufferEqual (BfState _ _ _ _ _ buffer) str = buffer == str
+bufferEqual (BfState _ _ _ _ _ _ buffer) str = buffer == str
 
 prop_buildMapSimple :: Bool
 prop_buildMapSimple =
@@ -156,14 +164,14 @@ prop_buildMapNested =
 prop_emptyProgram :: Bool
 prop_emptyProgram =
     doBfStep
-        (BfState "" 0 [0] 0 (buildJumpMap "" (Data.Map.empty) [] 0) "")
-        == BfState "" 0 [0] 0 (buildJumpMap "" (Data.Map.empty) [] 0) ""
+        (BfState "" 0 [0] 0 (buildJumpMap "" (Data.Map.empty) [] 0) "" "")
+        == BfState "" 0 [0] 0 (buildJumpMap "" (Data.Map.empty) [] 0) "" ""
 
 prop_singleInstr :: Bool
 prop_singleInstr =
     doBfStep
-        (BfState "+" 0 [0] 0 (buildJumpMap "+" (Data.Map.empty) [] 0) "")
-        == BfState "+" 1 [1] 0 (buildJumpMap "+" (Data.Map.empty) [] 0) ""
+        (BfState "+" 0 [0] 0 (buildJumpMap "+" (Data.Map.empty) [] 0) "" "")
+        == BfState "+" 1 [1] 0 (buildJumpMap "+" (Data.Map.empty) [] 0) "" ""
 
 prop_helloWorld :: Bool
 prop_helloWorld =
@@ -183,9 +191,39 @@ prop_helloWorld =
                     0
                     jmap
                     ""
+                    ""
                 )
             )
             "Hello World!\n"
+
+prop_pi :: Bool
+prop_pi =
+    let instructions =
+            ">[-]>[-]+[[-]>[-],[+[----------------------------------[>[-]+++[<----->-]<<<[->>\
+            \++++++++++<<]>>[-<<+>>]<+>]]]<]<[<+>>>>>>>>++++++++++<<<<<<<-]>+++++[<+++++++++>\
+            \-]+>>>>>>+[<<+++[>>[-<]<[>]<-]>>[>+>]<[<]>]>[[->>>>+<<<<]>>>+++>-]<[<<<<]<<<<<<<\
+            \<+[->>>>>>>>>>>>[<+[->>>>+<<<<]>>>>>]<<<<[>>>>>[<<<<+>>>>-]<<<<<-[<<++++++++++>>\
+            \-]>>>[<<[<+<<+>>>-]<[>+<-]<++<<+>>>>>>-]<<[-]<<-<[->>+<-[>>>]>[[<+>-]>+>>]<<<<<]\
+            \>[-]>+<<<-[>>+<<-]<]<<<<+>>>>>>>>[-]>[<<<+>>>-]<<++++++++++<[->>+<-[>>>]>[[<+>-]\
+            \>+>>]<<<<<]>[-]>+>[<<+<+>>>-]<<<<+<+>>[-[-[-[-[-[-[-[-[-<->[-<+<->>]]]]]]]]]]<[+\
+            \++++[<<<++++++++<++++++++>>>>-]<<<<+<->>>>[>+<<<+++++++++<->>>-]<<<<<[>>+<<-]+<[\
+            \->-<]>[>>.<<<<[+.[-]]>>-]>[>>.<<-]>[-]>[-]>>>[>>[<<<<<<<<+>>>>>>>>-]<<-]]>>[-]<<\
+            \<[-]<<<<<<<<]++++++++++."
+        jmap = buildJumpMap instructions Data.Map.empty [] 0
+        input = "10!"
+     in bufferEqual
+            ( doBfStep
+                ( BfState
+                    instructions
+                    0
+                    [0]
+                    0
+                    jmap
+                    input
+                    ""
+                )
+            )
+            "3.141592653\n"
 
 main :: IO ()
 main = do
@@ -194,4 +232,19 @@ main = do
     quickCheck prop_emptyProgram
     quickCheck prop_singleInstr
     quickCheck prop_helloWorld
-    putStr (runbf "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.")
+    quickCheck prop_pi
+    putStr (runbf "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>." "")
+    putStr
+        ( runbf
+            ">[-]>[-]+[[-]>[-],[+[----------------------------------[>[-]+++[<----->-]<<<[->>\
+            \++++++++++<<]>>[-<<+>>]<+>]]]<]<[<+>>>>>>>>++++++++++<<<<<<<-]>+++++[<+++++++++>\
+            \-]+>>>>>>+[<<+++[>>[-<]<[>]<-]>>[>+>]<[<]>]>[[->>>>+<<<<]>>>+++>-]<[<<<<]<<<<<<<\
+            \<+[->>>>>>>>>>>>[<+[->>>>+<<<<]>>>>>]<<<<[>>>>>[<<<<+>>>>-]<<<<<-[<<++++++++++>>\
+            \-]>>>[<<[<+<<+>>>-]<[>+<-]<++<<+>>>>>>-]<<[-]<<-<[->>+<-[>>>]>[[<+>-]>+>>]<<<<<]\
+            \>[-]>+<<<-[>>+<<-]<]<<<<+>>>>>>>>[-]>[<<<+>>>-]<<++++++++++<[->>+<-[>>>]>[[<+>-]\
+            \>+>>]<<<<<]>[-]>+>[<<+<+>>>-]<<<<+<+>>[-[-[-[-[-[-[-[-[-<->[-<+<->>]]]]]]]]]]<[+\
+            \++++[<<<++++++++<++++++++>>>>-]<<<<+<->>>>[>+<<<+++++++++<->>>-]<<<<<[>>+<<-]+<[\
+            \->-<]>[>>.<<<<[+.[-]]>>-]>[>>.<<-]>[-]>[-]>>>[>>[<<<<<<<<+>>>>>>>>-]<<-]]>>[-]<<\
+            \<[-]<<<<<<<<]++++++++++."
+            "10!"
+        )
